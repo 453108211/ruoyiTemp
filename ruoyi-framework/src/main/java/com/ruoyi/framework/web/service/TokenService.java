@@ -45,6 +45,11 @@ public class TokenService
     @Value("${token.expireTime}")
     private int expireTime;
 
+
+    // 是否允许账户多终端同时登录（true允许 false不允许）
+    @Value("${token.soloLogin}")
+    private boolean soloLogin;
+
     protected static final long MILLIS_SECOND = 1000;
 
     protected static final long MILLIS_MINUTE = 60 * MILLIS_SECOND;
@@ -96,13 +101,21 @@ public class TokenService
     /**
      * 删除用户身份信息
      */
-    public void delLoginUser(String token)
+    public void delLoginUser(String token, Long userId)
     {
         if (StringUtils.isNotEmpty(token))
         {
             String userKey = getTokenKey(token);
             redisCache.deleteObject(userKey);
         }
+
+        //在原有代码上添加下面的代码
+        if (!soloLogin && StringUtils.isNotNull(userId))
+        {
+            String userIdKey = getUserIdKey(userId);
+            redisCache.deleteObject(userIdKey);
+        }
+
     }
 
     /**
@@ -151,6 +164,21 @@ public class TokenService
         // 根据uuid将loginUser缓存
         String userKey = getTokenKey(loginUser.getToken());
         redisCache.setCacheObject(userKey, loginUser, expireTime, TimeUnit.MINUTES);
+
+        //在原有代码上添加下面的代码
+        if (!soloLogin)
+        {
+            // 缓存用户唯一标识，防止同一帐号，同时登录
+            String userIdKey = getUserIdKey(loginUser.getUser().getUserId());
+            redisCache.setCacheObject(userIdKey, userKey, expireTime, TimeUnit.MINUTES);
+        }
+    }
+
+
+    //添加下面的代码
+    private String getUserIdKey(Long userId)
+    {
+        return Constants.LOGIN_USERID_KEY + userId;
     }
 
     /**

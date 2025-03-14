@@ -2,6 +2,7 @@ package com.ruoyi.framework.web.service;
 
 import javax.annotation.Resource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -31,7 +32,7 @@ import com.ruoyi.system.service.ISysUserService;
 
 /**
  * 登录校验方法
- * 
+ *
  * @author ruoyi
  */
 @Component
@@ -45,16 +46,21 @@ public class SysLoginService
 
     @Autowired
     private RedisCache redisCache;
-    
+
     @Autowired
     private ISysUserService userService;
 
     @Autowired
     private ISysConfigService configService;
 
+
+    // 是否允许账户多终端同时登录（true允许 false不允许）
+    @Value("${token.soloLogin}")
+    private boolean soloLogin;
+
     /**
      * 登录验证
-     * 
+     *
      * @param username 用户名
      * @param password 密码
      * @param code 验证码
@@ -96,13 +102,27 @@ public class SysLoginService
         AsyncManager.me().execute(AsyncFactory.recordLogininfor(username, Constants.LOGIN_SUCCESS, MessageUtils.message("user.login.success")));
         LoginUser loginUser = (LoginUser) authentication.getPrincipal();
         recordLoginInfo(loginUser.getUserId());
+
+        // 判断是否允许账户多终端同时登录
+        if (!soloLogin)
+        {
+            // 如果用户不允许多终端同时登录，清除缓存信息
+            String userIdKey = Constants.LOGIN_USERID_KEY + loginUser.getUser().getUserId();
+            String userKey = redisCache.getCacheObject(userIdKey);
+            if (StringUtils.isNotEmpty(userKey))
+            {
+                redisCache.deleteObject(userIdKey);
+                redisCache.deleteObject(userKey);
+            }
+        }
+
         // 生成token
         return tokenService.createToken(loginUser);
     }
 
     /**
      * 校验验证码
-     * 
+     *
      * @param username 用户名
      * @param code 验证码
      * @param uuid 唯一标识
